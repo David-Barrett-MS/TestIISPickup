@@ -370,7 +370,10 @@ namespace TestIISPickup
                 adminBase = new MSAdminBase() as IMSAdminBase;
                 hr = adminBase.OpenKey(IntPtr.Zero, "LM/SmtpSvc", MBKeyAccess.Read, InfiniteTimeout, ref ptrKey);
                 if (hr < 0)
+                {
+                    Console.WriteLine("Failed to open IIS Metabase LM/SmtpSvc");
                     goto Exit;
+                }
 
                 MetadataRecord rec = new MetadataRecord();
 
@@ -378,11 +381,18 @@ namespace TestIISPickup
                 {
                     for (int index = 0; ; index++)
                     {
+                        Console.WriteLine($"Metabase record index: {index}");
                         hr = adminBase.EnumKeys(ptrKey, "", keySuffix, index);
                         if (hr == unchecked((int)MBErrors.NoMoreItems))
+                        {
+                            Console.WriteLine("No more metabase entries to parse");
                             break;
+                        }
                         if (hr < 0)
+                        {
+                            Console.WriteLine($"Error attempting to query entry {index}: hr={hr}");
                             goto Exit;
+                        }
 
                         rec.Identifier = (UInt32)PropertyName.ServerState;
                         rec.Attributes = 0;
@@ -397,9 +407,18 @@ namespace TestIISPickup
                         {
                             if (hr == unchecked((int)MBErrors.DataNotFound) ||
                                 hr == unchecked((int)MBErrors.AccessDenied))
+                            {
+                                if (hr == unchecked((int)MBErrors.DataNotFound))
+                                    Console.WriteLine("Unable to retrieve server data: MBErrors.DataNotFound");
+                                if (hr == unchecked((int)MBErrors.AccessDenied))
+                                    Console.WriteLine("Unable to retrieve server data: MBErrors.AccessDenied");
                                 continue;
+                            }
                             else
+                            {
+                                Console.WriteLine($"Unable to retrieve server data (check MBErrors enum for more info): hr={hr}");
                                 goto Exit;
+                            }
                         }
                         serverState = Marshal.ReadInt32((IntPtr)bufferPtr);
 
@@ -415,11 +434,16 @@ namespace TestIISPickup
 
                             hr = adminBase.GetData(ptrKey, keySuffix.ToString(), ref rec, ref reqLength);
                             if (hr < 0)
+                            {
+                                Console.WriteLine($"Error when retrieving data for server at index {index} from metabase: hr={hr}");
                                 goto Exit;
+                            }
 
                             pickupDirectory = Marshal.PtrToStringUni((IntPtr)bufferPtr);
                             break;
                         }
+                        else
+                            Console.WriteLine($"SMTP server at index {index} is not started");
                     }
 
                     if (hr == unchecked((int)MBErrors.NoMoreItems))
@@ -431,7 +455,10 @@ namespace TestIISPickup
                             if (hr == unchecked((int)MBErrors.NoMoreItems))
                                 break;
                             if (hr < 0)
+                            {
+                                Console.WriteLine($"Unexpected error from EnumKeys call (check MBErrors enum for more info): hr={hr}");
                                 goto Exit;
+                            }
 
                             rec.Identifier = (UInt32)PropertyName.PickupDirectory;
                             rec.Attributes = 0;
@@ -444,15 +471,21 @@ namespace TestIISPickup
                             hr = adminBase.GetData(ptrKey, keySuffix.ToString(), ref rec, ref reqLength);
                             if (hr < 0)
                             {
-                                if (hr == unchecked((int)MBErrors.DataNotFound))
-                                    Console.WriteLine("MBErrors.DataNotFound");
-                                if (hr == unchecked((int)MBErrors.AccessDenied))
-                                    Console.WriteLine("MBErrors.AccessDenied");
+
                                 if (hr == unchecked((int)MBErrors.DataNotFound) ||
                                     hr == unchecked((int)MBErrors.AccessDenied))
+                                {
+                                    if (hr == unchecked((int)MBErrors.DataNotFound))
+                                        Console.WriteLine("MBErrors.DataNotFound");
+                                    if (hr == unchecked((int)MBErrors.AccessDenied))
+                                        Console.WriteLine("MBErrors.AccessDenied");
                                     continue;
+                                }
                                 else
+                                {
+                                    Console.WriteLine($"Unexpected error from GetData call (check MBErrors enum for more info): hr={hr}");
                                     goto Exit;
+                                }
                             }
 
                             pickupDirectory = Marshal.PtrToStringUni((IntPtr)bufferPtr);
@@ -478,7 +511,12 @@ namespace TestIISPickup
                         adminBase.CloseKey(ptrKey);
             }
 
-        Console.WriteLine($"Pickup directory found: {pickupDirectory}");
+            if (String.IsNullOrEmpty(pickupDirectory))
+            {
+                Console.WriteLine("Could not determine Pickup Directory");
+            }
+            else
+                Console.WriteLine($"Pickup directory: {pickupDirectory}");
         return pickupDirectory;
         }
     }
